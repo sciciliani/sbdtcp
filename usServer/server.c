@@ -93,8 +93,10 @@ void iniciar_server(int puerto) {
 	recv(newConn, hsk, 27, 0);
 	send(newConn,"HOLA KERNEL", 11, 0);
 
+//while(
+	len = recv(newConn, &Pack, sizeof(struct sckReq), 0);
 
-	while (len = recv(newConn, &Pack, sizeof(struct sckReq), 0) > 0) {
+//> 0) {
 			printf("Recibi un pedido de %d bytes con: %d %ld %ld\n", len, Pack.op, Pack.offset, Pack.nbytes);
 			if (Pack.op == 0) {
 				//Lectura
@@ -110,7 +112,7 @@ void iniciar_server(int puerto) {
 				Pack.op = 10;
 				send(newConn, (void*)&Pack, sizeof(struct sckReq), 0);
 			}
-	}
+//	}
 
 }
 

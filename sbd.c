@@ -10,11 +10,11 @@
 #include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/in.h>
+
 #include <net/sock.h>
 #include <linux/skbuff.h>
 #include <linux/delay.h>
 #include <linux/inet.h>
-
 #include <linux/kernel.h> /* printk() */
 #include <linux/fs.h>     /* everything... */
 #include <linux/errno.h>  /* error codes */
@@ -23,11 +23,18 @@
 #include <linux/genhd.h>
 #include <linux/blkdev.h>
 #include <linux/hdreg.h>
+#include <linux/net.h>
+#include <linux/tcp.h>
+#include <asm/uaccess.h>
+#include <linux/file.h>
+#include <linux/socket.h>
+#include <linux/slab.h>
 
 MODULE_LICENSE("Dual BSD/GPL");
 #define KERNEL_SECTOR_SIZE 512
 #define SERVER_PORT 3000
 #define ESCRITURA 1
+#define SNDBUF 100
 
 static int major_num = 0;
 module_param(major_num, int, 0);
@@ -65,7 +72,7 @@ char* payload;
 
 static struct socket *clientsocket=NULL;
 
-int send_sync_buf (struct socket *sock, const void *buf,  const size_t length, unsigned long flags)
+int send_sync_buf (struct socket *sock, const void *buf, const size_t length, unsigned long flags)
 {
     struct msghdr msg;
     struct iovec iov;
@@ -82,43 +89,52 @@ int send_sync_buf (struct socket *sock, const void *buf,  const size_t length, u
 
     oldmm = get_fs(); set_fs(KERNEL_DS);
 
-// repeat_send:  <- repetir hasta mandar el buffer entero. TODO
-
+repeat_send:
     msg.msg_iov->iov_len = left;
-    msg.msg_iov->iov_base = (void *) buf + written;
+    msg.msg_iov->iov_base = (char *) buf + written;
 
     len = sock_sendmsg(sock, &msg, left);
-
+    if ((len == -ERESTARTSYS) || (!(flags & MSG_DONTWAIT) &&
+         (len == -EAGAIN)))
+        goto repeat_send;
+    if (len > 0) {
+        written += len;
+        left -= len;
+        if (left)
+            goto repeat_send;
+    }
+    set_fs(oldmm);
     return written ? written : len;
 }
 
-int recv_sync_buf (struct socket *sock, const void *buf,  const size_t length, unsigned long flags)
-{
-    struct msghdr msg;
-    struct iovec iov;
-    int len = 0;
-    mm_segment_t oldmm;
+int recv_sync_buf(struct socket *sock, void *buf, const size_t length, unsigned long flags)
+{       mm_segment_t oldmm;
+        struct msghdr msg;
+        struct iovec iov;
+        int len;
+        int max_size = length;
 
-    msg.msg_name     = 0;
-    msg.msg_namelen  = 0;
-    msg.msg_iov      = &iov;
-    msg.msg_iovlen   = 1;
-    msg.msg_control  = NULL;
-    msg.msg_controllen = 0;
-    msg.msg_flags    = 0; //MSG_DONTWAIT;
+        msg.msg_name     = 0;
+        msg.msg_namelen  = 0;
+        msg.msg_iov      = &iov;
+        msg.msg_iovlen   = 1;
+        msg.msg_control  = NULL;
+        msg.msg_controllen = 0;
+        msg.msg_flags    = 0;
 
-    oldmm = get_fs(); set_fs(KERNEL_DS);
+        msg.msg_iov->iov_base = buf;
+        msg.msg_iov->iov_len  = max_size;
 
-    msg.msg_iov->iov_len = length;
-    msg.msg_iov->iov_base = (void *) buf;
+        oldmm = get_fs(); set_fs(KERNEL_DS);
 
-    len = sock_recvmsg(sock, &msg, length, 0);
-
-    printk("Recibi del socket %d bytes\n", len);
-    return len;
-
+read_again:
+        len = sock_recvmsg(sock, &msg, max_size, 0); /* MSG_DONTWAIT); */
+        if (len == -EAGAIN || len == -ERESTARTSYS) {
+            goto read_again;
+        }
+        set_fs(oldmm);
+        return len;
 }
-
 
 void send_string(struct socket *sock, char *str)
 {
@@ -166,6 +182,9 @@ static void operar_sector(struct sbd_device *dev, unsigned long offset, unsigned
 			printk (KERN_EMERG "Envio una op de lectura de %d bytes (%d %ld %ld)\n",  len, pack.op, pack.offset, pack.nbytes);
 
 			len = recv_sync_buf(clientsocket, payload, nbytes + sizeof(struct sckReq) ,0);
+//			len = recv_sync_buf(clientsocket, payload + 1000 + sizeof(struct sckReq), 1000 ,0);
+//			len = recv_sync_buf(clientsocket, payload + 2000 + sizeof(struct sckReq), 1000 ,0);
+//			len = recv_sync_buf(clientsocket, payload + 3000 + sizeof(struct sckReq), 1000 ,0);
 			printk(KERN_EMERG "Recibi un tremendo paquete de: %d !\n", len);
 			memcpy(&pack, payload, sizeof(struct sckReq));
 			printk(KERN_EMERG "Des Serialice el Pack !\n");
