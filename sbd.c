@@ -66,9 +66,10 @@ struct sckReq {
 	unsigned int op;
 	unsigned long offset;
 	unsigned long nbytes;
-};
+} __attribute__((packed));;
 
 char* payload;
+char* disco;
 
 static struct socket *clientsocket=NULL;
 
@@ -163,41 +164,62 @@ static void operar_sector(struct sbd_device *dev, unsigned long offset, unsigned
 	pack.op = op;
 	pack.offset = offset;
 	pack.nbytes = nbytes;
-	payload = kmalloc(nbytes + sizeof(struct sckReq), GFP_KERNEL);
-	if (payload != NULL) {
-		printk(KERN_EMERG "Me preparo para recibir %ld bytes!\n", nbytes + sizeof(struct sckReq));
-
-	
-        	if (op == ESCRITURA) {
-			memcpy(payload, &pack, sizeof(struct sckReq));
-			memcpy(payload + sizeof(struct sckReq), buffer, nbytes);
-			len = send_sync_buf(clientsocket, payload, nbytes + sizeof(struct sckReq), 0);
-			printk (KERN_NOTICE "Envio una op de escritura de %d bytes (%d %ld %ld)\n",  len ,pack.op, pack.offset, pack.nbytes);
-			recv_sync_buf(clientsocket, (void*)&pack, sizeof(struct sckReq), 0);
-			if (pack.op == 10) 
-				printk(KERN_NOTICE "Escritura procesada correctamente!\n");
-
-		} else {
-			len = send_sync_buf(clientsocket, (void*)&pack, sizeof(struct sckReq), 0);
-			printk (KERN_EMERG "Envio una op de lectura de %d bytes (%d %ld %ld)\n",  len, pack.op, pack.offset, pack.nbytes);
-
-			len = recv_sync_buf(clientsocket, payload, nbytes + sizeof(struct sckReq) ,0);
-//			len = recv_sync_buf(clientsocket, payload + 1000 + sizeof(struct sckReq), 1000 ,0);
-//			len = recv_sync_buf(clientsocket, payload + 2000 + sizeof(struct sckReq), 1000 ,0);
-//			len = recv_sync_buf(clientsocket, payload + 3000 + sizeof(struct sckReq), 1000 ,0);
-			printk(KERN_EMERG "Recibi un tremendo paquete de: %d !\n", len);
-			memcpy(&pack, payload, sizeof(struct sckReq));
-			printk(KERN_EMERG "Des Serialice el Pack !\n");
-			memcpy(buffer, payload + sizeof(struct sckReq), nbytes);
-			printk(KERN_EMERG "Devolvi el buffer !\n");
-			if (pack.op == 11) 
-				printk(KERN_EMERG "Lectura procesada correctamente!\n");
-
+	printk (KERN_NOTICE "sbd: Operacion: %d - Off: %ld - Size: %ld\n", op, offset, nbytes);
+	if (op) {
+		payload = kmalloc(sizeof(struct sckReq) + nbytes, GFP_KERNEL);
+		memcpy(payload, &pack, sizeof(struct sckReq));
+		memcpy(payload + sizeof(struct sckReq), buffer, nbytes);
+		len = send_sync_buf(clientsocket, payload, sizeof(struct sckReq) + nbytes, 0);
+		len = recv_sync_buf(clientsocket, (void*)&pack, sizeof(struct sckReq), 0);
+		if (pack.op == 2) {
+			printk (KERN_NOTICE "sbd: Grabe correctamente %ld bytes\n", nbytes);
 		}
 		kfree(payload);
 	} else {
-		printk(KERN_EMERG "No anduvo el kmalloc!\n");
-	}
+		len = send_sync_buf(clientsocket, (void*)&pack, sizeof(struct sckReq), 0);
+		len = recv_sync_buf(clientsocket, buffer, nbytes, 0);
+		printk (KERN_NOTICE "sbd: Lei correctamente %ld bytes\n", nbytes);
+	} 
+//	if (op)
+//		memcpy(dev->data + offset, buffer, nbytes);
+//	else
+//		memcpy(buffer, dev->data + offset, nbytes);
+
+
+//	payload = kmalloc(nbytes + sizeof(struct sckReq), GFP_KERNEL);
+//	if (payload != NULL) {
+//		printk(KERN_EMERG "Me preparo para recibir %ld bytes!\n", nbytes + sizeof(struct sckReq));
+
+//        	if (op == ESCRITURA) {
+			//memcpy(payload, &pack, sizeof(struct sckReq));
+			//memcpy(payload + sizeof(struct sckReq), buffer, nbytes);
+			//len = send_sync_buf(clientsocket, payload, nbytes + sizeof(struct sckReq), 0);
+//			printk (KERN_NOTICE "Envio una op de escritura de %d bytes (%d %ld %ld)\n",  len ,pack.op, pack.offset, pack.nbytes);
+			//recv_sync_buf(clientsocket, (void*)&pack, sizeof(struct sckReq), 0);
+//			if (pack.op == 10) 
+//				printk(KERN_NOTICE "Escritura procesada correctamente!\n");
+
+//		} else {
+//			len = send_sync_buf(clientsocket, (void*)&pack, sizeof(struct sckReq), 0);
+//			printk (KERN_EMERG "Envio una op de lectura de %d bytes (%d %ld %ld)\n",  len, pack.op, pack.offset, pack.nbytes);
+
+//			len = recv_sync_buf(clientsocket, payload, nbytes + sizeof(struct sckReq) ,0);
+////			len = recv_sync_buf(clientsocket, payload + 1000 + sizeof(struct sckReq), 1000 ,0);
+////			len = recv_sync_buf(clientsocket, payload + 2000 + sizeof(struct sckReq), 1000 ,0);
+////			len = recv_sync_buf(clientsocket, payload + 3000 + sizeof(struct sckReq), 1000 ,0);
+//			printk(KERN_EMERG "Recibi un tremendo paquete de: %d !\n", len);
+//			memcpy(&pack, payload, sizeof(struct sckReq));
+//			printk(KERN_EMERG "Des Serialice el Pack !\n");
+//			memcpy(buffer, payload + sizeof(struct sckReq), nbytes);
+//			printk(KERN_EMERG "Devolvi el buffer !\n");
+//			if (pack.op == 11) 
+//				printk(KERN_EMERG "Lectura procesada correctamente!\n");
+
+//		}
+//		kfree(payload);
+//	} else {
+//		printk(KERN_EMERG "No anduvo el kmalloc!\n");
+//	}
 
 }
 
@@ -287,6 +309,7 @@ static int __init sbd_init(void) {
 	}
 
 	printk(KERN_NOTICE "Iniciando disco\n");
+	disco = kmalloc(nsectors * logical_block_size, GFP_KERNEL);
 
         /*
          * Set up our internal device.
@@ -339,6 +362,8 @@ out:
 
 static void __exit sbd_exit(void)
 {
+
+	kfree(disco);
 
 	if (clientsocket)
 		sock_release(clientsocket);

@@ -64,6 +64,7 @@ void iniciar_server(int puerto) {
 	struct sockaddr_in server; 
 	char hsk[28];
 
+
 	int newConn, sd, len;
 	if ((sd=socket(AF_INET, SOCK_STREAM, 0)) == -1 ) {
 		printf("error en socket()\n");
@@ -94,25 +95,39 @@ void iniciar_server(int puerto) {
 	send(newConn,"HOLA KERNEL", 11, 0);
 
 //while(
-	len = recv(newConn, &Pack, sizeof(struct sckReq), 0);
+	while(len = recv(newConn, &Pack, sizeof(struct sckReq), 0)) {
 
 //> 0) {
-			printf("Recibi un pedido de %d bytes con: %d %ld %ld\n", len, Pack.op, Pack.offset, Pack.nbytes);
-			if (Pack.op == 0) {
+		printf("Recibi un pedido de %d bytes con: %d %ld %ld...", len, Pack.op, Pack.offset, Pack.nbytes);
+		if (Pack.op) {
+			buffer = malloc(Pack.nbytes);
+			len = recv(newConn, buffer, Pack.nbytes, 0);
+			printf(" y %d bytes del buffer...\n", len);
+			Pack.op = 2;
+			len = send(newConn, (void*)&Pack, sizeof(struct sckReq), 0);
+			printf("Devolvi %d bytes\n", len);
+			memcpy(mfile + Pack.offset, buffer, Pack.nbytes);
+		} else {
+			len = send(newConn, mfile + Pack.offset, Pack.nbytes, 0);
+			printf("Devolvi %d bytes\n", len);
+		}
+
+			//if (Pack.op == 0) {
 				//Lectura
-				Pack.op = 11;
-				buffer = malloc(Pack.nbytes + sizeof(struct sckReq));
-				memcpy(buffer, &Pack, sizeof(struct sckReq));
-				memcpy(buffer + sizeof(struct sckReq), mfile + Pack.offset, Pack.nbytes);
-				send(newConn, buffer, sizeof(struct sckReq) + Pack.nbytes, 0);
-			} else { 
+				//Pack.op = 11;
+				//buffer = malloc(Pack.nbytes + sizeof(struct sckReq));
+				//memcpy(buffer, &Pack, sizeof(struct sckReq));
+				//memcpy(buffer + sizeof(struct sckReq), mfile + Pack.offset, Pack.nbytes);
+				//send(newConn, buffer, sizeof(struct sckReq) + Pack.nbytes, 0);
+			//} else { 
 				//Escritura
-				recv(newConn, buffer, Pack.nbytes, 0 );
-				memcpy(mfile + Pack.offset, buffer, Pack.nbytes);
-				Pack.op = 10;
-				send(newConn, (void*)&Pack, sizeof(struct sckReq), 0);
-			}
+				//recv(newConn, buffer, Pack.nbytes, 0 );
+				//memcpy(mfile + Pack.offset, buffer, Pack.nbytes);
+				//Pack.op = 10;
+				//send(newConn, (void*)&Pack, sizeof(struct sckReq), 0);
+			//}
 //	}
+	}
 
 }
 

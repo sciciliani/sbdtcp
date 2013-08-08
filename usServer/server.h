@@ -4,7 +4,7 @@ struct sckReq {
         unsigned int op;
         unsigned long offset;
         unsigned long nbytes;
-};
+} __attribute__((packed));;
 
 void mmapear(char* archivo) ;
 void terminar(void);

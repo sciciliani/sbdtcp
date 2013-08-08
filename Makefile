@@ -1,6 +1,6 @@
 obj-m := sbd.o
 KDIR := /lib/modules/$(shell uname -r)/build
 PWD := $(shell pwd)
-default:
-        $(MAKE) -C $(KDIR) SUBDIRS=$(PWD) modules
+all:
+	make -C $(KDIR) M=`pwd` SUBDIRS=$(PWD) modules
 
