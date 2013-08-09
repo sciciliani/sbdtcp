@@ -42,6 +42,8 @@ static int logical_block_size = KERNEL_SECTOR_SIZE;
 module_param(logical_block_size, int, 0);
 static int nsectors = 1024; /* How big the drive is */
 module_param(nsectors, int, 0);
+static char *ip = "127.0.0.1";
+module_param(ip, charp, 0);
 
 /*
  * We can tweak our hardware sector size, but the kernel talks to us
@@ -69,7 +71,6 @@ struct sckReq {
 } __attribute__((packed));;
 
 char* payload;
-char* disco;
 
 static struct socket *clientsocket=NULL;
 
@@ -166,6 +167,7 @@ static void operar_sector(struct sbd_device *dev, unsigned long offset, unsigned
 	pack.nbytes = nbytes;
 	printk (KERN_NOTICE "sbd: Operacion: %d - Off: %ld - Size: %ld\n", op, offset, nbytes);
 	if (op) {
+		// ESCRITURA.
 		payload = kmalloc(sizeof(struct sckReq) + nbytes, GFP_KERNEL);
 		memcpy(payload, &pack, sizeof(struct sckReq));
 		memcpy(payload + sizeof(struct sckReq), buffer, nbytes);
@@ -176,50 +178,11 @@ static void operar_sector(struct sbd_device *dev, unsigned long offset, unsigned
 		}
 		kfree(payload);
 	} else {
+		// LECTURA.
 		len = send_sync_buf(clientsocket, (void*)&pack, sizeof(struct sckReq), 0);
 		len = recv_sync_buf(clientsocket, buffer, nbytes, 0);
 		printk (KERN_NOTICE "sbd: Lei correctamente %ld bytes\n", nbytes);
 	} 
-//	if (op)
-//		memcpy(dev->data + offset, buffer, nbytes);
-//	else
-//		memcpy(buffer, dev->data + offset, nbytes);
-
-
-//	payload = kmalloc(nbytes + sizeof(struct sckReq), GFP_KERNEL);
-//	if (payload != NULL) {
-//		printk(KERN_EMERG "Me preparo para recibir %ld bytes!\n", nbytes + sizeof(struct sckReq));
-
-//        	if (op == ESCRITURA) {
-			//memcpy(payload, &pack, sizeof(struct sckReq));
-			//memcpy(payload + sizeof(struct sckReq), buffer, nbytes);
-			//len = send_sync_buf(clientsocket, payload, nbytes + sizeof(struct sckReq), 0);
-//			printk (KERN_NOTICE "Envio una op de escritura de %d bytes (%d %ld %ld)\n",  len ,pack.op, pack.offset, pack.nbytes);
-			//recv_sync_buf(clientsocket, (void*)&pack, sizeof(struct sckReq), 0);
-//			if (pack.op == 10) 
-//				printk(KERN_NOTICE "Escritura procesada correctamente!\n");
-
-//		} else {
-//			len = send_sync_buf(clientsocket, (void*)&pack, sizeof(struct sckReq), 0);
-//			printk (KERN_EMERG "Envio una op de lectura de %d bytes (%d %ld %ld)\n",  len, pack.op, pack.offset, pack.nbytes);
-
-//			len = recv_sync_buf(clientsocket, payload, nbytes + sizeof(struct sckReq) ,0);
-////			len = recv_sync_buf(clientsocket, payload + 1000 + sizeof(struct sckReq), 1000 ,0);
-////			len = recv_sync_buf(clientsocket, payload + 2000 + sizeof(struct sckReq), 1000 ,0);
-////			len = recv_sync_buf(clientsocket, payload + 3000 + sizeof(struct sckReq), 1000 ,0);
-//			printk(KERN_EMERG "Recibi un tremendo paquete de: %d !\n", len);
-//			memcpy(&pack, payload, sizeof(struct sckReq));
-//			printk(KERN_EMERG "Des Serialice el Pack !\n");
-//			memcpy(buffer, payload + sizeof(struct sckReq), nbytes);
-//			printk(KERN_EMERG "Devolvi el buffer !\n");
-//			if (pack.op == 11) 
-//				printk(KERN_EMERG "Lectura procesada correctamente!\n");
-
-//		}
-//		kfree(payload);
-//	} else {
-//		printk(KERN_EMERG "No anduvo el kmalloc!\n");
-//	}
 
 }
 
@@ -255,7 +218,7 @@ static void sbd_request(struct request_queue *q) {
 int sbd_getgeo(struct block_device * block_device, struct hd_geometry * geo) {
         long size;
 
-	printk (KERN_NOTICE "Solicitud de geometria\n");
+	printk (KERN_NOTICE "Solicitud de geometria...");
 
         /* We have no real geometry, of course, so make something up. */
         size = Device.size * (logical_block_size / KERNEL_SECTOR_SIZE);
@@ -264,7 +227,7 @@ int sbd_getgeo(struct block_device * block_device, struct hd_geometry * geo) {
         geo->sectors = 16;
         geo->start = 0;
 
-	printk (KERN_NOTICE "Respondo: (%d, %d, %d)\n", geo->cylinders, geo->heads, geo->sectors);
+	printk (KERN_NOTICE " (CHS) = (%d, %d, %d)\n", geo->cylinders, geo->heads, geo->sectors);
 
 
         return 0;
@@ -281,7 +244,6 @@ static struct block_device_operations sbd_ops = {
 
 static int __init sbd_init(void) {
 
-
 	struct sockaddr_in to;
 	int retVal = 0;
 	char hello[12]; // "HOLA KERNEL"
@@ -295,7 +257,7 @@ static int __init sbd_init(void) {
 	
 	memset(&to,0, sizeof(to));
 	to.sin_family = AF_INET;
-	to.sin_addr.s_addr = in_aton("127.0.0.1");  
+	to.sin_addr.s_addr = in_aton(ip);  
 	to.sin_port = htons(SERVER_PORT);
 	retVal = clientsocket->ops->connect(clientsocket, (struct sockaddr*)&to, sizeof(struct sockaddr_in), 0);
 
@@ -305,11 +267,10 @@ static int __init sbd_init(void) {
 		recv_string(clientsocket, hello, 11);
 		printk(KERN_EMERG "Me respondieron %s\n", hello);
 	} else {
-		printk(KERN_EMERG "Error %d\n", -retVal);
+		printk(KERN_EMERG "Error conectando a %s (%d)\n", ip, -retVal);
 	}
 
 	printk(KERN_NOTICE "Iniciando disco\n");
-	disco = kmalloc(nsectors * logical_block_size, GFP_KERNEL);
 
         /*
          * Set up our internal device.
@@ -363,7 +324,6 @@ out:
 static void __exit sbd_exit(void)
 {
 
-	kfree(disco);
 
 	if (clientsocket)
 		sock_release(clientsocket);

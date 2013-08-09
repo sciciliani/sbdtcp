@@ -19,6 +19,7 @@ __used
 __attribute__((section("__versions"))) = {
 	{ 0x35ec255d, "module_layout" },
 	{ 0x15692c87, "param_ops_int" },
+	{ 0x35b6b772, "param_ops_charp" },
 	{ 0xd4ce552f, "blk_cleanup_queue" },
 	{ 0xbcc99e4f, "put_disk" },
 	{ 0x9af95bb4, "del_gendisk" },
@@ -54,4 +55,4 @@ __attribute__((section(".modinfo"))) =
 "depends=";
 
 
-MODULE_INFO(srcversion, "3452BE1F4E5ABFE4429E5B4");
+MODULE_INFO(srcversion, "026319FC95D6307D0BB8E43");
